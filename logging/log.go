@@ -1,4 +1,4 @@
-package log
+package logging
 
 import (
     "os"
@@ -8,7 +8,7 @@ import (
     "strconv"
     "path/filepath"
 
-    "base/log/adapter"
+    "logging/adapter"
 )
 
 const (
