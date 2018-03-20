@@ -8,7 +8,7 @@ import (
     "strconv"
     "path/filepath"
 
-    "logging/adapter"
+    "toolbox/logging/adapter"
 )
 
 const (
