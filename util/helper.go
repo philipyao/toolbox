@@ -3,6 +3,7 @@ package util
 import (
 	"fmt"
 	"io"
+	"os"
 	"bytes"
     "crypto/rand"
 	"compress/zlib"
@@ -31,8 +32,8 @@ func Compress(data []byte) []byte {
 	}
 	var in bytes.Buffer
 	w := zlib.NewWriter(&in)
-	defer w.Close()
 	w.Write(data)
+	w.Close()	//flush数据
 	return in.Bytes()
 }
 
@@ -40,17 +41,33 @@ func Decompress(data []byte) []byte {
 	if len(data) == 0 {
 		return []byte{}
 	}
+	fmt.Println("1")
 	b := bytes.NewReader(data)
 	r, err := zlib.NewReader(b)
 	if err != nil {
 		fmt.Printf("error decompress: %v\n", err)
 		return []byte{}
 	}
+	defer r.Close()
 	var out bytes.Buffer
 	io.Copy(&out, r)
+	fmt.Println("2")
 	return out.Bytes()
 }
 
+func Decompress2(data []byte) {
+	if len(data) == 0 {
+		return
+	}
+	b := bytes.NewReader(data)
+	r, err := zlib.NewReader(b)
+	if err != nil {
+		fmt.Printf("error decompress: %v\n", err)
+		return
+	}
+	defer r.Close()
+	io.Copy(os.Stdout, r)
+}
 //=======================================================
 func generateRandomBytes(n int) ([]byte, error) {
     b := make([]byte, n)
