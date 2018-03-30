@@ -1,7 +1,11 @@
 package util
 
 import (
+	"fmt"
+	"io"
+	"bytes"
     "crypto/rand"
+	"compress/zlib"
 )
 
 const (
@@ -19,6 +23,32 @@ func GenerateRandomString(n int) (string, error) {
         bytes[i] = letters[b%length]
     }
     return string(bytes), nil
+}
+
+func Compress(data []byte) []byte {
+	if len(data) == 0 {
+		return []byte{}
+	}
+	var in bytes.Buffer
+	w := zlib.NewWriter(&in)
+	defer w.Close()
+	w.Write(data)
+	return in.Bytes()
+}
+
+func Decompress(data []byte) []byte {
+	if len(data) == 0 {
+		return []byte{}
+	}
+	b := bytes.NewReader(data)
+	r, err := zlib.NewReader(b)
+	if err != nil {
+		fmt.Printf("error decompress: %v\n", err)
+		return []byte{}
+	}
+	var out bytes.Buffer
+	io.Copy(&out, r)
+	return out.Bytes()
 }
 
 //=======================================================
