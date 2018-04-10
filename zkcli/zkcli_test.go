@@ -24,14 +24,14 @@ func TestWatch(t *testing.T) {
         t.Fatalf("Create returned: %+v", err)
     }
     stop := make(chan struct{}, 1)
-    err = Watch(zkConn, testPath, func(p string, d []byte, e error){
+    err = zkConn.Watch(testPath, func(p string, d []byte, e error){
         fmt.Println("w1: ", p, d, e)
     }, stop)
     if err != nil {
         t.Fatal(err)
     }
     stop2 := make(chan struct{}, 1)
-    err = Watch(zkConn, "/notexist", func(p string, d []byte, e error){
+    err = zkConn.Watch("/notexist", func(p string, d []byte, e error){
         fmt.Println("w2: ", p, d, e)
     }, stop2)
     if err != nil {
@@ -59,7 +59,7 @@ func TestWatchChildren(t *testing.T) {
         t.Fatalf("Create returned: %+v", err)
     }
     stop := make(chan struct{}, 1)
-    err = WatchChildren(zkConn, testPath, func(p string, c []string, e error){
+    err = zkConn.WatchChildren(testPath, func(p string, c []string, e error){
         fmt.Println("wc: ", p, c, e)
     }, stop)
     if err != nil {
@@ -77,11 +77,41 @@ func TestCreateEphemeral(t *testing.T) {
     }
     defer zkConn.Conn().Close()
 
-    err = CreateEphemeral(zkConn, "/go-zktest-ephemeral1", []byte{})
+    err = zkConn.CreateEphemeral("/go-zktest-ephemeral1", []byte{})
     if err != nil {
         t.Fatal(err)
     }
     //模拟session断开
-    zkConn.Conn().TmpCloseConn()
-    time.Sleep(60 * time.Second)
+    //zkConn.Conn().TmpCloseConn()
+
+    //time.Sleep(60 * time.Second)
+}
+
+func TestGetChildren(t *testing.T) {
+    zkConn, err := Connect("10.1.164.20:2181,10.1.164.20:2182")
+    if err != nil {
+        t.Fatalf("Connect returned error: %+v", err)
+    }
+    defer zkConn.Conn().Close()
+
+    err = zkConn.Create("/go-zktest-children", []byte{})
+    if err != nil {
+        t.Fatal(err)
+    }
+
+	for i := 0; i < 5; i++ {
+    	err = zkConn.Create(fmt.Sprintf("/go-zktest-children/c%v", i+1), []byte(fmt.Sprintf("val%v", i+1)))
+    	if err != nil {
+        	t.Fatal(err)
+    	}
+	}
+
+	results, err := zkConn.GetChildren("/go-zktest-children")
+	if err != nil {
+    	t.Fatal(err)
+	}
+	for k, v := range results {
+		t.Logf("key %v, value %v", k, string(v))
+	}
+	
 }
