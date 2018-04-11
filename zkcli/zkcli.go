@@ -65,6 +65,16 @@ func (c *Conn) GetChildren(path string) (map[string][]byte, error) {
 
 
 func (c *Conn) Write(path string, data []byte) error {
+	//永久节点
+	return c.write(path, data, int32(0))
+}
+
+func (c *Conn) WriteEphemeral(path string, data []byte) error {
+	//临时节点
+	return c.write(path, data, int32(zk.FlagEphemeral))
+}
+
+func (c *Conn) write(path string, data []byte, flags int32) error {
     exist, stat, err := c.conn.Exists(path)
     if err != nil {
         return err
@@ -73,8 +83,6 @@ func (c *Conn) Write(path string, data []byte) error {
         _, err = c.conn.Set(path, data, stat.Version)
     } else {
         //不存在则创建
-        // 永久节点
-        flags := int32(0)
         _, err = doCreate(c.conn, path, data, flags)
     }
     return err
