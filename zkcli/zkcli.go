@@ -54,11 +54,12 @@ func (c *Conn) GetChildren(path string) (map[string][]byte, error) {
 		return nil, err
 	}
 	for _, child := range nodes {
-		data, err := c.Get(path + "/" + child)
+        tp := path + "/" + child
+		data, err := c.Get(tp)
 		if err != nil {
-			return nil, fmt.Errorf("child node %v get error %v", child, err)
+			return nil, fmt.Errorf("child node %v get error %v", tp, err)
 		}
-		children[child] = data
+		children[tp] = data
 	}
 	return children, nil
 }
