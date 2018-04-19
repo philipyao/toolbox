@@ -225,6 +225,7 @@ func (c *Conn) WatchDir(path string, events chan *EventDataChild, exit chan stru
         sendChildEventError(events, fmt.Errorf("watch path %v err %v", path, err))
         return
     }
+    //fmt.Printf("zk: children: %+v\n", children)
     var handle bool
     go func() {
         for {
@@ -234,6 +235,7 @@ func (c *Conn) WatchDir(path string, events chan *EventDataChild, exit chan stru
                 //上层关闭监听
                 return
             case ev := <-ch:
+                //fmt.Printf("zk: ev: %+v\n", ev)
                 if ev.Err != nil {
                     sendChildEventError(events, fmt.Errorf("watch path %v event err %v", path, ev.Err))
                     return
@@ -254,6 +256,7 @@ func (c *Conn) WatchDir(path string, events chan *EventDataChild, exit chan stru
                 sendChildEventError(events, fmt.Errorf("watch path %v err %v", path, err))
                 return
             }
+            //fmt.Printf("zk: handle %v, children: %+v, old: %+v\n", handle, children, oldChildren)
             if handle {
                 sendDiffChildren(c.Conn(), path, events, oldChildren, children)
             }

@@ -44,40 +44,91 @@ import (
 //    time.Sleep(time.Second)
 //}
 
-func TestWatchNode(t *testing.T) {
+//func TestWatchNode(t *testing.T) {
+//    zkConn, err := Connect("10.1.164.20:2181,10.1.164.20:2182")
+//    if err != nil {
+//        t.Fatalf("Connect returned error: %+v", err)
+//    }
+//    defer zkConn.Close()
+//
+//    zkPath := "/gozk-test-w11"
+//    err = zkConn.WriteEphemeral(zkPath, []byte{})
+//    if err != nil {
+//        t.Fatalf("Create returned: %+v", err)
+//    }
+//    exit := make(chan struct{})
+//    events := make(chan *EventDataNode, 10)
+//    zkConn.WatchNode(zkPath, events, exit)
+//
+//    go func() {
+//        time.Sleep(time.Second * 1)
+//        zkConn2, err := Connect("10.1.164.20:2181,10.1.164.20:2182")
+//        if err != nil {
+//            t.Fatalf("Connect returned error: %v", err)
+//        }
+//        defer zkConn2.Close()
+//
+//        time.Sleep(time.Second * 1)
+//        err = zkConn2.WriteEphemeral(zkPath, []byte("hello"))
+//        if err != nil {
+//            t.Fatalf("WriteEphemeral returned: %v", err)
+//        }
+//        time.Sleep(time.Second * 1)
+//        err = zkConn2.WriteEphemeral(zkPath, []byte("world"))
+//        if err != nil {
+//            t.Fatalf("WriteEphemeral returned: %v", err)
+//        }
+//    }()
+//
+//    go func() {
+//        for ev := range events {
+//            fmt.Printf("received event: %+v, time %v\n", ev, time.Now().Unix())
+//        }
+//        t.Logf("receive goroutine exit.")
+//    }()
+//
+//    <-time.After(8 * time.Second)
+//    exit <- struct{}{}
+//    close(events)
+//
+//    time.Sleep(1 * time.Second)
+//}
+
+func TestWatchDir(t *testing.T) {
     zkConn, err := Connect("10.1.164.20:2181,10.1.164.20:2182")
     if err != nil {
         t.Fatalf("Connect returned error: %+v", err)
     }
     defer zkConn.Close()
 
-    zkPath := "/gozk-test-w11"
-    err = zkConn.WriteEphemeral(zkPath, []byte{})
+    zkPath := "/gozk-test-w12"
+    err = zkConn.Write(zkPath, []byte{})
     if err != nil {
         t.Fatalf("Create returned: %+v", err)
     }
     exit := make(chan struct{})
-    events := make(chan *EventDataNode, 10)
-    zkConn.WatchNode(zkPath, events, exit)
+    events := make(chan *EventDataChild, 10)
+    zkConn.WatchDir(zkPath, events, exit)
 
     go func() {
-        time.Sleep(time.Second * 1)
+        time.Sleep(time.Second * 2)
         zkConn2, err := Connect("10.1.164.20:2181,10.1.164.20:2182")
         if err != nil {
             t.Fatalf("Connect returned error: %v", err)
         }
         defer zkConn2.Close()
 
-        time.Sleep(time.Second * 1)
-        err = zkConn2.WriteEphemeral(zkPath, []byte("hello"))
+        time.Sleep(time.Second * 2)
+        err = zkConn2.WriteEphemeral(zkPath + "/service1", []byte("1"))
         if err != nil {
             t.Fatalf("WriteEphemeral returned: %v", err)
         }
-        time.Sleep(time.Second * 1)
-        err = zkConn2.WriteEphemeral(zkPath, []byte("world"))
+        err = zkConn2.WriteEphemeral(zkPath + "/service2", []byte("2"))
         if err != nil {
             t.Fatalf("WriteEphemeral returned: %v", err)
         }
+
+        time.Sleep(time.Second * 2)
     }()
 
     go func() {
