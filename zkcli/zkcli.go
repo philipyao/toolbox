@@ -2,8 +2,11 @@ package zkcli
 
 import (
     "fmt"
+    "errors"
     "strings"
     "time"
+    "path/filepath"
+    "log"
 
     "github.com/samuel/go-zookeeper/zk"
 )
@@ -19,6 +22,18 @@ const (
     //重连成功之后，临时节点和watch依然有效
     DefaultConnectTimeout       = 5
 )
+
+type EventDataChild struct {
+    Err         error
+    Adds        map[string]string       //新增path/value
+    Dels        []string                //删除path
+}
+type EventDataNode struct {
+    Err         error
+    Path        string
+    Value       string
+    OldVal      string
+}
 
 type Conn struct {
     conn *zk.Conn
@@ -195,6 +210,102 @@ func (c *Conn) WatchChildren(path string, cb FuncWatchChildrenCallback, stopCh c
     return nil
 }
 
+//watch一个dir的子节点，关注节点的增删
+func (c *Conn) WatchDir(path string, events chan *EventDataChild, exit chan struct{}) {
+    if len(path) == 0 {
+        sendChildEventError(events, errors.New("empty path"))
+        return
+    }
+    if path != "/" {
+        path = strings.TrimSuffix(path, "/")
+    }
+
+    children, ch, err := childrenW(c.Conn(), path)
+    if err != nil {
+        sendChildEventError(events, fmt.Errorf("watch path %v err %v", path, err))
+        return
+    }
+    var handle bool
+    go func() {
+        for {
+            handle = true
+            select {
+            case <-exit:
+                //上层关闭监听
+                return
+            case ev := <-ch:
+                if ev.Err != nil {
+                    sendChildEventError(events, fmt.Errorf("watch path %v event err %v", path, ev.Err))
+                    return
+                }
+                if ev.Path != path {
+                    sendChildEventError(events, errors.New("watch path mismatch"))
+                    return
+                }
+                if ev.Type != zk.EventNodeChildrenChanged {
+                    handle = false
+                }
+            }
+            // 获取变化后的节点数据
+            // 并更新watcher（zookeeper的watcher是一次性的）
+            oldChildren := children
+            children, ch, err = childrenW(c.Conn(), path)
+            if err != nil {
+                sendChildEventError(events, fmt.Errorf("watch path %v err %v", path, err))
+                return
+            }
+            if handle {
+                sendDiffChildren(c.Conn(), path, events, oldChildren, children)
+            }
+        }
+    }()
+}
+
+func (c *Conn) WatchNode(path string, events chan *EventDataNode, exit chan struct{}) {
+    if len(path) == 0 {
+        sendNodeEventError(events, errors.New("empty path"))
+        return
+    }
+    if path != "/" {
+        path = strings.TrimSuffix(path, "/")
+    }
+    data, ch, err := getW(c.conn, path)
+    if err != nil {
+        sendNodeEventError(events, fmt.Errorf("watch path %v err %v", path, err))
+        return
+    }
+    go func() {
+        for {
+            select {
+            case <-exit:
+                //上层关闭监听
+                return
+            case ev := <-ch:
+                if ev.Err != nil {
+                    sendNodeEventError(events, fmt.Errorf("watch path %v event err %v", path, ev.Err))
+                    return
+                }
+                if ev.Path != path {
+                    sendNodeEventError(events, errors.New("watch path mismatch"))
+                    return
+                }
+                if ev.Type == zk.EventNodeDeleted {
+                    return
+                }
+            }
+            // 获取变化后的节点数据
+            // 并更新watcher（zookeeper的watcher是一次性的）
+            oldData := data
+            data, ch, err = getW(c.conn, path)
+            if err != nil {
+                sendNodeEventError(events, fmt.Errorf("watch path %v err %v", path, err))
+                return
+            }
+            sendDiffNode(path, events, string(oldData), string(data))
+        }
+    }()
+}
+
 func Connect(zkAddr string) (*Conn, error) {
     if len(zkAddr) == 0 {
         return nil, fmt.Errorf("empty zkAddr")
@@ -221,6 +332,11 @@ func childrenW(zkConn *zk.Conn, path string) ([]string, <-chan zk.Event, error) 
     return children, ch, err
 }
 
+func children(zkConn *zk.Conn, path string) ([]string, error) {
+    children, _, err := zkConn.Children(path)
+    return children, err
+}
+
 func doCreate(zkConn *zk.Conn, path string, data []byte, flags int32) (string, error) {
     //TODO 权限控制
     acl := zk.WorldACL(zk.PermAll)
@@ -230,6 +346,84 @@ func doCreate(zkConn *zk.Conn, path string, data []byte, flags int32) (string, e
     }
 
     return path, nil
+}
+
+func sendDiffChildren(zkConn *zk.Conn, path string, events chan *EventDataChild, oldChildren, children []string) {
+    var found bool
+    diff := &EventDataChild{
+        Adds: make(map[string]string),
+    }
+    for _, child := range children {
+        found = false
+        for _, oc := range oldChildren {
+            if child == oc {
+                found = true
+                break
+            }
+        }
+        if !found {
+            cPath := filepath.Join(path, child)
+            value, _, err := zkConn.Get(cPath)
+            if err != nil {
+                //todo log
+                continue
+            }
+            diff.Adds[cPath] = string(value)
+        }
+    }
+    for _, oc := range oldChildren {
+        found = false
+        for _, child := range children {
+            if child == oc {
+                found = true
+                break
+            }
+        }
+        if !found {
+            cPath := filepath.Join(path, oc)
+            diff.Dels = append(diff.Dels, cPath)
+        }
+    }
+    select {
+    case events <- diff:
+    default:
+        //todo log
+    }
+}
+
+func sendDiffNode(path string, events chan *EventDataNode, oldData, data string) {
+    diff := &EventDataNode{
+        Path: path,
+        Value: data,
+        OldVal: oldData,
+    }
+    select {
+    case events <- diff:
+    default:
+    //todo log
+    }
+}
+
+func sendChildEventError(events chan *EventDataChild, err error) {
+    errData := &EventDataChild {
+        Err: err,
+    }
+    select {
+    case events <- errData:
+    default:
+    //todo log
+    }
+}
+
+func sendNodeEventError(events chan *EventDataNode, err error) {
+    errData := &EventDataNode{
+        Err: err,
+    }
+    select {
+    case events <- errData:
+    default:
+        //todo log
+    }
 }
 
 
