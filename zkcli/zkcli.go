@@ -281,6 +281,7 @@ func (c *Conn) WatchNode(path string, events chan *EventDataNode, exit chan stru
                 //上层关闭监听
                 return
             case ev := <-ch:
+                log.Printf("watch trigger: %+v", ev)
                 if ev.Err != nil {
                     sendNodeEventError(events, fmt.Errorf("watch path %v event err %v", path, ev.Err))
                     return
