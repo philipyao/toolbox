@@ -154,6 +154,33 @@ func (c *Conn) Create(path string, data []byte) error {
     return err
 }
 
+//依次创建各级目录，类似unix系统 mkdir -p
+func (c *Conn) MakeDirP(dir string) error {
+    if len(dir) == 0 {
+        return errors.New("empty dir")
+    }
+    if !strings.HasPrefix(dir, "/") {
+        return errors.New("invalid dir: no root")
+    }
+    if dir == "/" {
+        return nil
+    }
+    dir = strings.TrimSuffix(dir, "/")
+
+    var (
+        path string
+        err error
+    )
+    for _, v := range strings.Split(dir, "/")[1:] {
+        path = path + "/" + v
+        err = c.Create(path, []byte{})
+        if err != nil {
+            return err
+        }
+    }
+    return nil
+}
+
 func (c *Conn) CreateEphemeral(path string, data []byte) error {
     exist, _, err := c.Conn().Exists(path)
     if err != nil {
