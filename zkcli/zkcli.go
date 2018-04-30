@@ -24,11 +24,13 @@ const (
 )
 
 type EventDataChild struct {
+    Closed      bool
     Err         error
     Adds        map[string]string       //新增path/value
     Dels        []string                //删除path
 }
 type EventDataNode struct {
+    Closed      bool
     Err         error
     Path        string
     Value       string
@@ -249,7 +251,7 @@ func (c *Conn) WatchDir(path string, events chan *EventDataChild, exit chan stru
 
     children, ch, err := childrenW(c.Conn(), path)
     if err != nil {
-        sendChildEventError(events, fmt.Errorf("watch path %v err %v", path, err))
+        sendChildEventError(events, fmt.Errorf("childrenW<%v> err: %v", path, err))
         return
     }
     //fmt.Printf("zk: children: %+v\n", children)
@@ -262,17 +264,19 @@ func (c *Conn) WatchDir(path string, events chan *EventDataChild, exit chan stru
                 //上层关闭监听
                 return
             case ev := <-ch:
-                //fmt.Printf("zk: ev: %+v\n", ev)
-                if ev.Err != nil {
-                    sendChildEventError(events, fmt.Errorf("watch path %v event err %v", path, ev.Err))
-                    return
-                }
-                if ev.Path != path {
-                    sendChildEventError(events, errors.New("watch path mismatch"))
-                    return
-                }
-                if ev.Type != zk.EventNodeChildrenChanged {
-                    handle = false
+                log.Printf("watch dir trigger: %+v", ev)
+                if ev.Type == zk.EventNodeChildrenChanged {
+                    if ev.Err != nil {
+                        sendChildEventError(events, fmt.Errorf("watch path %v event err %v", path, ev.Err))
+                        return
+                    }
+                    if ev.Path != path {
+                        sendChildEventError(events, errors.New("watch path mismatch"))
+                        return
+                    }
+                    if ev.Type != zk.EventNodeChildrenChanged {
+                        handle = false
+                    }
                 }
             }
             // 获取变化后的节点数据
@@ -280,7 +284,7 @@ func (c *Conn) WatchDir(path string, events chan *EventDataChild, exit chan stru
             oldChildren := children
             children, ch, err = childrenW(c.Conn(), path)
             if err != nil {
-                sendChildEventError(events, fmt.Errorf("watch path %v err %v", path, err))
+                sendChildEventError(events, fmt.Errorf("childrenW<%v> err: %v", path, err))
                 return
             }
             //fmt.Printf("zk: handle %v, children: %+v, old: %+v\n", handle, children, oldChildren)
@@ -301,7 +305,7 @@ func (c *Conn) WatchNode(path string, events chan *EventDataNode, exit chan stru
     }
     data, ch, err := getW(c.conn, path)
     if err != nil {
-        sendNodeEventError(events, fmt.Errorf("watch path %v err %v", path, err))
+        sendNodeEventError(events, fmt.Errorf("getW<%v> err %v", path, err))
         return
     }
     go func() {
@@ -311,7 +315,11 @@ func (c *Conn) WatchNode(path string, events chan *EventDataNode, exit chan stru
                 //上层关闭监听
                 return
             case ev := <-ch:
-                log.Printf("watch trigger: %+v", ev)
+                log.Printf("watch node trigger: %+v", ev)
+                if ev.Type == zk.EventNotWatching {
+                    sendNodeEventClosed(events)
+                    return
+                }
                 if ev.Err != nil {
                     sendNodeEventError(events, fmt.Errorf("watch path %v event err %v", path, ev.Err))
                     return
@@ -329,7 +337,7 @@ func (c *Conn) WatchNode(path string, events chan *EventDataNode, exit chan stru
             oldData := data
             data, ch, err = getW(c.conn, path)
             if err != nil {
-                sendNodeEventError(events, fmt.Errorf("watch path %v err %v", path, err))
+                sendNodeEventError(events, fmt.Errorf("getW<%v> err %v", path, err))
                 return
             }
             sendDiffNode(path, events, string(oldData), string(data))
@@ -339,7 +347,7 @@ func (c *Conn) WatchNode(path string, events chan *EventDataNode, exit chan stru
 
 func Connect(zkAddr string) (*Conn, error) {
     if len(zkAddr) == 0 {
-        return nil, fmt.Errorf("empty zkAddr")
+        return nil, errors.New("empty zkAddr")
     }
     zks := strings.Split(zkAddr, ",")
     conn, _, err := zk.Connect(zks, time.Second * DefaultConnectTimeout)
@@ -446,12 +454,28 @@ func sendChildEventError(events chan *EventDataChild, err error) {
     }
 }
 
+func sendChildEventClosed(events chan *EventDataChild) {
+    select {
+    case events <- &EventDataChild{Closed: true}:
+    default:
+    //todo log
+    }
+}
+
 func sendNodeEventError(events chan *EventDataNode, err error) {
     errData := &EventDataNode{
         Err: err,
     }
     select {
     case events <- errData:
+    default:
+        //todo log
+    }
+}
+
+func sendNodeEventClosed(events chan *EventDataNode) {
+    select {
+    case events <- &EventDataNode{Closed: true}:
     default:
         //todo log
     }
