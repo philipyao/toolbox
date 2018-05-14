@@ -1,74 +1,74 @@
 package logging
 
 import (
-    "os"
     "fmt"
-    "time"
+    "os"
+    "path/filepath"
     "runtime"
     "strconv"
-    "path/filepath"
+    "time"
 
     "github.com/philipyao/toolbox/logging/adapter"
 )
 
 const (
-    _ int              = iota
+    _ int = iota
     LevelDebug
     LevelInfo
     LevelWarn
     LevelError
     LevelFatal
 
-    LevelStringDebug    = "DEBUG"
-    LevelStringInfo     = "INFO"
-    LevelStringWarn     = "WARN"
-    LevelStringError    = "ERROR"
-    LevelStringFatal    = "FATAL"
+    LevelStringDebug = "DEBUG"
+    LevelStringInfo  = "INFO"
+    LevelStringWarn  = "WARN"
+    LevelStringError = "ERROR"
+    LevelStringFatal = "FATAL"
 )
 
+type logFlag int8
 
-type logFlag    int8
 const (
-    _ logFlag       = (1 << iota)
+    _ logFlag = (1 << iota)
     LogDate
     LogTime
     LogMicroTime
     LogLongFile
     LogShortFile
-    LogStd          = LogDate | LogTime | LogShortFile
+    LogStd = LogDate | LogTime | LogShortFile
 )
 
 const (
-    LogChanSize           = 1024000
-    DefaultCalldepth      = 2
+    LogChanSize      = 1024000
+    DefaultCalldepth = 2
 )
 
 const (
-    AdapterConsole      = "console"
-    AdapterFile         = "file"
-    AdapterNet          = "net"
+    AdapterConsole = "console"
+    AdapterFile    = "file"
+    AdapterNet     = "net"
 )
 
 var (
-    adapters    map[string]adapter.Adapter
+    adapters map[string]adapter.Adapter
 
-    level       string
-    lvs         map[string]int
+    level string
+    lvs   map[string]int
 
-    flag        logFlag
+    flag logFlag
 
-    logChan     chan *logMessage
-    doneChan    chan struct{}
+    logChan  chan *logMessage
+    doneChan chan struct{}
 )
 
 func init() {
-    adapters    = make(map[string]adapter.Adapter)
-    lvs         = map[string]int{
-        LevelStringDebug:   LevelDebug,
-        LevelStringInfo:    LevelInfo,
-        LevelStringWarn:    LevelWarn,
-        LevelStringError:   LevelError,
-        LevelStringFatal:   LevelFatal,
+    adapters = make(map[string]adapter.Adapter)
+    lvs = map[string]int{
+        LevelStringDebug: LevelDebug,
+        LevelStringInfo:  LevelInfo,
+        LevelStringWarn:  LevelWarn,
+        LevelStringError: LevelError,
+        LevelStringFatal: LevelFatal,
     }
 
     //默认输出INFO
@@ -96,7 +96,7 @@ func AddAdapter(name string, conf string) error {
         panic(name)
     } else if name == AdapterFile {
         options := &adapter.Options{
-            MaxSize: adapter.ByteSize(logconf.MaxSize),
+            MaxSize:   adapter.ByteSize(logconf.MaxSize),
             MaxBackup: logconf.MaxBackup,
         }
         adp, err = adapter.NewAdapterFile(logconf.FileName, options)
@@ -186,34 +186,35 @@ func Flush() {
     }
 }
 
-
 //////////////////////////////////////////////////////////////////////
 
 func output(calldepth int, lvString string, format string, args ...interface{}) {
-    if logChan == nil { return }
+    if logChan == nil {
+        return
+    }
 
     var text string
     tmNow := time.Now()
-    if flag & LogDate != 0 {
+    if flag&LogDate != 0 {
         y, m, d := tmNow.Date()
         text += fmt.Sprintf("%04d-%02d-%02d", y, int(m), d)
         text += " "
     }
-    if flag & LogTime != 0 {
+    if flag&LogTime != 0 {
         text += tmNow.Format("15:04:05")
-        if flag & LogMicroTime != 0 {
+        if flag&LogMicroTime != 0 {
             text += fmt.Sprintf(".%06d", tmNow.Nanosecond()/1e3)
         }
         text += " "
     }
 
-    if flag & (LogShortFile | LogLongFile) != 0 {
+    if flag&(LogShortFile|LogLongFile) != 0 {
         _, file, line, ok := runtime.Caller(calldepth)
         if !ok {
             file = "???"
             line = 0
         } else {
-            if flag & LogShortFile != 0 {
+            if flag&LogShortFile != 0 {
                 file = filepath.Base(file)
             }
         }
@@ -239,7 +240,7 @@ func output(calldepth int, lvString string, format string, args ...interface{}) 
 func handleWriteLog() {
     //要结束该for range循环，可以close(logChan)
     for logMsg := range logChan {
-        for _, adp  := range adapters {
+        for _, adp := range adapters {
             adp.Write(logMsg.Buff)
         }
         logMessagePut(logMsg)

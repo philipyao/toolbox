@@ -4,7 +4,6 @@ import (
     //"time"
     //"fmt"
     "testing"
-
     //"github.com/samuel/go-zookeeper/zk"
 )
 
@@ -214,19 +213,19 @@ func TestMakeDirP(t *testing.T) {
 //        t.Fatal(err)
 //    }
 //
-//	for i := 0; i < 5; i++ {
-//    	err = zkConn.Create(fmt.Sprintf("/go-zktest-children/c%v", i+1), []byte(fmt.Sprintf("val%v", i+1)))
-//    	if err != nil {
-//        	t.Fatal(err)
-//    	}
-//	}
+//    for i := 0; i < 5; i++ {
+//        err = zkConn.Create(fmt.Sprintf("/go-zktest-children/c%v", i+1), []byte(fmt.Sprintf("val%v", i+1)))
+//        if err != nil {
+//            t.Fatal(err)
+//        }
+//    }
 //
-//	results, err := zkConn.GetChildren("/go-zktest-children")
-//	if err != nil {
-//    	t.Fatal(err)
-//	}
-//	for k, v := range results {
-//		t.Logf("key %v, value %v", k, string(v))
-//	}
+//    results, err := zkConn.GetChildren("/go-zktest-children")
+//    if err != nil {
+//        t.Fatal(err)
+//    }
+//    for k, v := range results {
+//        t.Logf("key %v, value %v", k, string(v))
+//    }
 //
 //}

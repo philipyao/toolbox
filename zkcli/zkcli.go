@@ -1,18 +1,19 @@
 package zkcli
 
 import (
-    "fmt"
     "errors"
+    "fmt"
+    "log"
+    "path/filepath"
     "strings"
     "time"
-    "path/filepath"
-    "log"
 
     "github.com/samuel/go-zookeeper/zk"
 )
 
 //回调：监视节点变化
 type FuncWatchCallback func(path string, data []byte, err error)
+
 //回调：监视子节点改变
 type FuncWatchChildrenCallback func(path string, children []string, err error)
 
@@ -20,26 +21,27 @@ const (
     //zk session的超时时间，在此时间内，session可以自动保活
     //如果在此时间内，与特定server的连接断开，自动尝试重连其他服务器
     //重连成功之后，临时节点和watch依然有效
-    DefaultConnectTimeout       = 5
+    DefaultConnectTimeout = 5
 )
 
 type EventDataChild struct {
-    Closed      bool
-    Err         error
-    Adds        map[string]string       //新增path/value
-    Dels        []string                //删除path
+    Closed bool
+    Err    error
+    Adds   map[string]string //新增path/value
+    Dels   []string          //删除path
 }
 type EventDataNode struct {
-    Closed      bool
-    Err         error
-    Path        string
-    Value       string
-    OldVal      string
+    Closed bool
+    Err    error
+    Path   string
+    Value  string
+    OldVal string
 }
 
 type Conn struct {
     conn *zk.Conn
 }
+
 func (c *Conn) Conn() *zk.Conn {
     return c.conn
 }
@@ -60,36 +62,35 @@ func (c *Conn) Exists(path string) (bool, error) {
 }
 
 func (c *Conn) Get(path string) ([]byte, error) {
-	data, _, err := c.Conn().Get(path);
-	return data, err
+    data, _, err := c.Conn().Get(path)
+    return data, err
 }
 
 func (c *Conn) GetChildren(path string) (map[string][]byte, error) {
-	children := make(map[string][]byte)
-	nodes, _, err := c.Conn().Children(path)
-	if err != nil {
-		return nil, err
-	}
-	for _, child := range nodes {
+    children := make(map[string][]byte)
+    nodes, _, err := c.Conn().Children(path)
+    if err != nil {
+        return nil, err
+    }
+    for _, child := range nodes {
         tp := path + "/" + child
-		data, err := c.Get(tp)
-		if err != nil {
-			return nil, fmt.Errorf("child node %v get error %v", tp, err)
-		}
-		children[tp] = data
-	}
-	return children, nil
+        data, err := c.Get(tp)
+        if err != nil {
+            return nil, fmt.Errorf("child node %v get error %v", tp, err)
+        }
+        children[tp] = data
+    }
+    return children, nil
 }
 
-
 func (c *Conn) Write(path string, data []byte) error {
-	//永久节点
-	return c.write(path, data, int32(0))
+    //永久节点
+    return c.write(path, data, int32(0))
 }
 
 func (c *Conn) WriteEphemeral(path string, data []byte) error {
-	//临时节点
-	return c.write(path, data, int32(zk.FlagEphemeral))
+    //临时节点
+    return c.write(path, data, int32(zk.FlagEphemeral))
 }
 
 func (c *Conn) write(path string, data []byte, flags int32) error {
@@ -156,6 +157,10 @@ func (c *Conn) Create(path string, data []byte) error {
     return err
 }
 
+func (c *Conn) Delete(path string) error {
+    return c.Conn().Delete(path, 0)
+}
+
 //依次创建各级目录，类似unix系统 mkdir -p
 func (c *Conn) MakeDirP(dir string) error {
     if len(dir) == 0 {
@@ -171,7 +176,7 @@ func (c *Conn) MakeDirP(dir string) error {
 
     var (
         path string
-        err error
+        err  error
     )
     for _, v := range strings.Split(dir, "/")[1:] {
         path = path + "/" + v
@@ -262,21 +267,24 @@ func (c *Conn) WatchDir(path string, events chan *EventDataChild, exit chan stru
             select {
             case <-exit:
                 //上层关闭监听
+                fmt.Println("zk watchDir exit by caller")
+                close(events)
                 return
             case ev := <-ch:
                 log.Printf("watch dir trigger: %+v", ev)
-                if ev.Type == zk.EventNodeChildrenChanged {
-                    if ev.Err != nil {
-                        sendChildEventError(events, fmt.Errorf("watch path %v event err %v", path, ev.Err))
-                        return
-                    }
-                    if ev.Path != path {
-                        sendChildEventError(events, errors.New("watch path mismatch"))
-                        return
-                    }
-                    if ev.Type != zk.EventNodeChildrenChanged {
-                        handle = false
-                    }
+                if ev.Type == zk.EventNotWatching {
+                    return
+                }
+                if ev.Err != nil {
+                    sendChildEventError(events, fmt.Errorf("watch path %v event err %v", path, ev.Err))
+                    return
+                }
+                if ev.Path != path {
+                    sendChildEventError(events, errors.New("watch path mismatch"))
+                    return
+                }
+                if ev.Type != zk.EventNodeChildrenChanged {
+                    handle = false
                 }
             }
             // 获取变化后的节点数据
@@ -287,7 +295,7 @@ func (c *Conn) WatchDir(path string, events chan *EventDataChild, exit chan stru
                 sendChildEventError(events, fmt.Errorf("childrenW<%v> err: %v", path, err))
                 return
             }
-            //fmt.Printf("zk: handle %v, children: %+v, old: %+v\n", handle, children, oldChildren)
+            fmt.Printf("zk: handle %v, children: %+v, old: %+v\n", handle, children, oldChildren)
             if handle {
                 sendDiffChildren(c.Conn(), path, events, oldChildren, children)
             }
@@ -313,6 +321,8 @@ func (c *Conn) WatchNode(path string, events chan *EventDataNode, exit chan stru
             select {
             case <-exit:
                 //上层关闭监听
+                fmt.Println("zk watchNode exit by caller")
+                close(events)
                 return
             case ev := <-ch:
                 log.Printf("watch node trigger: %+v", ev)
@@ -350,7 +360,7 @@ func Connect(zkAddr string) (*Conn, error) {
         return nil, errors.New("empty zkAddr")
     }
     zks := strings.Split(zkAddr, ",")
-    conn, _, err := zk.Connect(zks, time.Second * DefaultConnectTimeout)
+    conn, _, err := zk.Connect(zks, time.Second*DefaultConnectTimeout)
     if err != nil {
         return nil, fmt.Errorf("err connect to zk<%v>: %v", zkAddr, err)
     }
@@ -392,7 +402,9 @@ func sendDiffChildren(zkConn *zk.Conn, path string, events chan *EventDataChild,
     diff := &EventDataChild{
         Adds: make(map[string]string),
     }
+    fmt.Printf("sendDiffChildren: old %+v, children %+v\n", oldChildren, children)
     for _, child := range children {
+        fmt.Printf("scan children to find new: curr<%v>\n", child)
         found = false
         for _, oc := range oldChildren {
             if child == oc {
@@ -400,13 +412,15 @@ func sendDiffChildren(zkConn *zk.Conn, path string, events chan *EventDataChild,
                 break
             }
         }
+        fmt.Printf("found: %v\n", found)
         if !found {
             cPath := filepath.Join(path, child)
             value, _, err := zkConn.Get(cPath)
             if err != nil {
-                //todo log
+                fmt.Printf("zkConn.Get<%v> err: %v\n", cPath, err)
                 continue
             }
+            fmt.Printf("add new<%v> to new\n", cPath)
             diff.Adds[cPath] = string(value)
         }
     }
@@ -432,25 +446,25 @@ func sendDiffChildren(zkConn *zk.Conn, path string, events chan *EventDataChild,
 
 func sendDiffNode(path string, events chan *EventDataNode, oldData, data string) {
     diff := &EventDataNode{
-        Path: path,
-        Value: data,
+        Path:   path,
+        Value:  data,
         OldVal: oldData,
     }
     select {
     case events <- diff:
     default:
-    //todo log
+        //todo log
     }
 }
 
 func sendChildEventError(events chan *EventDataChild, err error) {
-    errData := &EventDataChild {
+    errData := &EventDataChild{
         Err: err,
     }
     select {
     case events <- errData:
     default:
-    //todo log
+        //todo log
     }
 }
 
@@ -458,7 +472,7 @@ func sendChildEventClosed(events chan *EventDataChild) {
     select {
     case events <- &EventDataChild{Closed: true}:
     default:
-    //todo log
+        //todo log
     }
 }
 
@@ -480,7 +494,3 @@ func sendNodeEventClosed(events chan *EventDataNode) {
         //todo log
     }
 }
-
-
-
-

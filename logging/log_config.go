@@ -1,18 +1,18 @@
 package logging
 
 import (
-    "log"
     "encoding/json"
+    "log"
 )
 
 type logConfigFile struct {
-    FileName    string    `json:"filename"`
-    MaxSize     int64     `json:"maxsize"`
-    MaxBackup   int       `json:"maxbackup"`
+    FileName  string `json:"filename"`
+    MaxSize   int64  `json:"maxsize"`
+    MaxBackup int    `json:"maxbackup"`
 }
 type logConfigNet struct {
-    Net         string    `json:"net"`
-    Addr        string    `json:"addr"`
+    Net  string `json:"net"`
+    Addr string `json:"addr"`
 }
 
 type logConfig struct {

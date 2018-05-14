@@ -3,12 +3,13 @@ package logging
 import (
     "sync"
 )
+
 type logMessage struct {
-    Buff       []byte
+    Buff []byte
 }
 
 var (
-    logPool    sync.Pool
+    logPool sync.Pool
 )
 
 func init() {
@@ -24,4 +25,3 @@ func logMessageGet() *logMessage {
 func logMessagePut(l *logMessage) {
     logPool.Put(l)
 }
-

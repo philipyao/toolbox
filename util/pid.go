@@ -3,9 +3,9 @@ package util
 import (
     "fmt"
     "os"
+    "path/filepath"
     "strconv"
     "strings"
-    "path/filepath"
 )
 
 func GenPidFilePath(sname string) string {
@@ -54,4 +54,3 @@ func WritePidToFile(filepath string, pid int) error {
 func DeletePidFile(filepath string) error {
     return os.Remove(filepath)
 }
-

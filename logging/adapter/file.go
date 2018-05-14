@@ -1,32 +1,32 @@
 package adapter
 
 import (
-	"time"
-	"os"
 	"fmt"
-	"strings"
 	"log"
+	"os"
+	"strings"
+	"time"
 )
 
 const (
-	DefaultMaxSize          = 100 * MB
-	DefaultBackup           = 10
+	DefaultMaxSize = 100 * MB
+	DefaultBackup  = 10
 )
 
-type AdapterFile struct{
-	fileName        string
+type AdapterFile struct {
+	fileName string
 
-	options         Options
-	currDate        string
-	writer          *os.File
-	size            ByteSize
+	options  Options
+	currDate string
+	writer   *os.File
+	size     ByteSize
 }
 
 func NewAdapterFile(logName string, opt *Options) (*AdapterFile, error) {
 	a := &AdapterFile{
 		fileName: logName,
 		options: Options{
-			MaxSize: DefaultMaxSize,
+			MaxSize:   DefaultMaxSize,
 			MaxBackup: DefaultBackup,
 		},
 		size: ByteSize(0),
@@ -61,7 +61,7 @@ func (af *AdapterFile) Write(b []byte) error {
 			return err
 		}
 	} else {
-		if af.size + ByteSize(len(b)) >= af.options.MaxSize {
+		if af.size+ByteSize(len(b)) >= af.options.MaxSize {
 			//切换序号
 			err = af.rotateBySize()
 			if err != nil {
@@ -69,7 +69,6 @@ func (af *AdapterFile) Write(b []byte) error {
 			}
 		}
 	}
-
 
 	n, err := af.writer.Write(b)
 	if err != nil {
@@ -133,7 +132,7 @@ func (af *AdapterFile) makeLogName(backup int) string {
 }
 
 func (af *AdapterFile) openLogFile(fname string) error {
-	f, err := os.OpenFile(fname, os.O_RDWR | os.O_APPEND | os.O_CREATE, 0644)
+	f, err := os.OpenFile(fname, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
 		log.Printf("openLogFile error: file %v, err %v", fname, err)
 		return err
