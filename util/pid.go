@@ -13,6 +13,7 @@ func GenPidFilePath(sname string) string {
     if err != nil {
         return ""
     }
+    os.MkdirAll(filepath.Join(wd, "pid"), 0700)
     return filepath.Join(wd, "pid", fmt.Sprintf("run.%v.pid", sname))
 }
 
